@@ -324,6 +324,10 @@ export default function App() {
     try {
       const permissions = await invoke<PermissionStatus>("get_permission_status");
       setPermissionStatus(permissions);
+      if (permissions.screen_capture === "unsupported") {
+        setRecordingError("Screen recording is not available on this platform yet. MotionCam can record on macOS 15 or newer.");
+        return;
+      }
       if (permissions.screen_capture !== "granted") {
         setIsOnboardingOpen(true);
         setRecordingError("Screen recording permission is not enabled. Open setup, grant access in macOS Settings, then refresh the permission status.");

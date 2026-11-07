@@ -60,10 +60,12 @@ jobs:
       - name: Verify both architectures and create checksum
         id: artifact
         run: |
+          set -euxo pipefail
           app="$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$app"
           executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
           architectures="$(lipo -archs "$app/Contents/MacOS/$executable")"
+          echo "App executable architectures: $architectures"
           echo "$architectures" | grep -qw arm64
           echo "$architectures" | grep -qw x86_64
           dmg="$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"

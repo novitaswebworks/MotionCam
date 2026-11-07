@@ -26,6 +26,29 @@ const MONITORINFO_PRIMARY_FLAG: u32 = 1;
 const BASE_DPI: f64 = 96.0;
 
 /// Records one display with Windows Graphics Capture into an H.264 MP4.
+/// Windows Graphics Capture needs no user permission, only a new enough Windows
+/// (10 version 2004 for cursor-free capture).
+pub fn screen_capture_permission() -> crate::capture::PermissionState {
+    use crate::capture::PermissionState;
+    match windows_capture::graphics_capture_api::GraphicsCaptureApi::is_supported() {
+        Ok(true) => PermissionState::Granted,
+        Ok(false) => PermissionState::Unsupported,
+        Err(_) => PermissionState::Unknown,
+    }
+}
+
+/// Windows has no cheap, reliable query for the microphone privacy switch, so
+/// report whether a microphone exists. A blocked mic fails at recording start
+/// with a message that points at Windows Settings.
+pub fn microphone_permission() -> crate::capture::PermissionState {
+    use crate::capture::PermissionState;
+    if crate::capture::audio_windows::has_microphone() {
+        PermissionState::Granted
+    } else {
+        PermissionState::NotGranted
+    }
+}
+
 pub struct WindowsScreenRecorder {
     session: CaptureSession,
 }

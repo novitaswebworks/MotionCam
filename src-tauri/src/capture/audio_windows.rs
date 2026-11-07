@@ -53,6 +53,10 @@ pub fn list_input_devices() -> Vec<AudioDeviceInfo> {
         .collect()
 }
 
+pub fn has_microphone() -> bool {
+    cpal::default_host().default_input_device().is_some()
+}
+
 pub struct AudioCapture {
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
@@ -147,9 +151,11 @@ fn open_streams(
 
     if request.microphone {
         let device = pick_microphone(&host, request.mic_device_id.as_deref())?;
-        let config = device
-            .default_input_config()
-            .map_err(|e| format!("Could not read the microphone format: {e}"))?;
+        let config = device.default_input_config().map_err(|e| {
+            format!(
+                "Could not use the microphone: {e}. Check Settings > Privacy & security > Microphone."
+            )
+        })?;
         streams.push(build_stream(&device, config, Arc::clone(mic))?);
     }
 

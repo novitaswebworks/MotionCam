@@ -82,7 +82,23 @@ pub mod commands {
                 .map_err(|error| format!("Could not open macOS Privacy & Security: {error}"))?;
             Ok(())
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            let page = match section.as_str() {
+                "screen" => "ms-settings:privacy-graphicscaptureprogrammatic",
+                "microphone" => "ms-settings:privacy-microphone",
+                _ => return Err("Unsupported privacy settings section".into()),
+            };
+            std::process::Command::new("cmd")
+                .args(["/C", "start", "", page])
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .map_err(|error| format!("Could not open Windows Settings: {error}"))?;
+            Ok(())
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             let _ = section;
             Err("Open privacy permissions from your operating system settings".into())

@@ -6,7 +6,7 @@ pub mod webcam;
 pub mod macos;
 
 #[cfg(target_os = "windows")]
-mod audio_windows;
+pub(crate) mod audio_windows;
 #[cfg(target_os = "windows")]
 mod cursor_windows;
 #[cfg(target_os = "windows")]
@@ -323,7 +323,14 @@ impl ActiveRecordingSession {
                 microphone: macos::microphone_permission_status(),
             }
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            PermissionStatus {
+                screen_capture: windows::screen_capture_permission(),
+                microphone: windows::microphone_permission(),
+            }
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             PermissionStatus {
                 screen_capture: PermissionState::Unsupported,
@@ -337,7 +344,11 @@ impl ActiveRecordingSession {
         {
             macos::request_screen_capture_permission()
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            windows::screen_capture_permission()
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             PermissionState::Unsupported
         }
@@ -348,7 +359,11 @@ impl ActiveRecordingSession {
         {
             macos::request_microphone_permission()
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            Ok(windows::microphone_permission())
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             Ok(PermissionState::Unsupported)
         }

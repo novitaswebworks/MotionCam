@@ -26,6 +26,7 @@ import { ExportModal } from "./components/export/ExportModal";
 import { CaptureHome } from "./components/CaptureHome";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { useAppTheme } from "./lib/appTheme";
+import { osName, settingsAppName } from "./lib/platform";
 import { readRecordingPreset, RecordingPreset, saveRecordingPreset } from "./lib/recordingPreset";
 
 const INITIAL_CANVAS_CONFIG: CanvasConfig = {
@@ -190,15 +191,15 @@ export default function App() {
             displayId: list.some((display) => display.id === previous.displayId) ? previous.displayId : primary.id,
           }));
         } else {
-          setDisplayPermissionMessage("macOS reports screen access as granted, but MotionCam cannot see a display yet. Quit and reopen MotionCam, then refresh this status.");
+          setDisplayPermissionMessage(`${osName} reports screen access as granted, but MotionCam cannot see a display yet. Quit and reopen MotionCam, then refresh this status.`);
         }
       } catch (error) {
         setDisplays([]);
-        setDisplayPermissionMessage(`macOS reports screen access as granted, but MotionCam could not list displays. Quit and reopen MotionCam, then refresh. ${String(error)}`);
+        setDisplayPermissionMessage(`${osName} reports screen access as granted, but MotionCam could not list displays. Quit and reopen MotionCam, then refresh. ${String(error)}`);
       }
     } catch (error) {
       setPermissionStatus({ screen_capture: "unknown", microphone: "unknown" });
-      setDisplayPermissionMessage(`Could not read macOS permission status: ${String(error)}`);
+      setDisplayPermissionMessage(`Could not read ${osName} permission status: ${String(error)}`);
     } finally {
       setIsRefreshingPermissions(false);
     }
@@ -325,12 +326,12 @@ export default function App() {
       const permissions = await invoke<PermissionStatus>("get_permission_status");
       setPermissionStatus(permissions);
       if (permissions.screen_capture === "unsupported") {
-        setRecordingError("Screen recording is not available on this platform yet. MotionCam can record on macOS 15 or newer.");
+        setRecordingError("Screen recording is not available on this system. MotionCam needs macOS 15 or newer, or Windows 10 version 2004 or newer.");
         return;
       }
       if (permissions.screen_capture !== "granted") {
         setIsOnboardingOpen(true);
-        setRecordingError("Screen recording permission is not enabled. Open setup, grant access in macOS Settings, then refresh the permission status.");
+        setRecordingError(`Screen recording permission is not enabled. Open setup, grant access in ${settingsAppName}, then refresh the permission status.`);
         return;
       }
       if (recordingPreset.microphoneEnabled && permissions.microphone !== "granted") {

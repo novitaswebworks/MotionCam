@@ -4,6 +4,7 @@ import { APP_THEMES, AppTheme } from "../lib/appTheme";
 import { AudioDevice, DisplayInfo, PermissionStatus } from "../lib/types";
 import { RECORDING_QUALITIES, RecordingQuality } from "../lib/recordingPreset";
 import { MotionCamMark } from "./brand/MotionCamMark";
+import { isWindows, osName } from "../lib/platform";
 
 type PrivacySection = "screen" | "microphone";
 
@@ -49,8 +50,8 @@ function permissionLabel(status: PermissionStatus["microphone"] | undefined, dev
   switch (status) {
     case "granted": return "Granted";
     case "not_determined": return "Not requested";
-    case "denied": return "Denied in macOS";
-    case "restricted": return "Restricted by macOS";
+    case "denied": return `Denied in ${osName}`;
+    case "restricted": return `Restricted by ${osName}`;
     case "not_granted": return "Not granted";
     case "unsupported": return "Not available on this platform";
     case "unknown": return "Status unavailable";
@@ -132,7 +133,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
             <div>
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-400">System access</p>
               <h1 className="mt-3 text-2xl font-semibold tracking-tight">Allow the devices you plan to use</h1>
-              <p className="mt-2 text-sm leading-6 text-zinc-400">macOS controls these permissions. MotionCam can open the relevant settings pane; you choose whether to grant access.</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-400">{osName} controls these permissions. MotionCam can open the relevant settings pane; you choose whether to grant access.</p>
 
               <div className="mt-4 flex items-center justify-between gap-3 border border-zinc-800 bg-zinc-950 px-3 py-2">
                 <span className="text-xs text-zinc-400">Refresh screen and microphone status after returning from Settings.</span>
@@ -147,7 +148,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     <Monitor size={17} className="mt-0.5 shrink-0 text-zinc-400" />
                     <div>
                       <div className="text-sm font-medium">Screen capture <span className="text-rose-400">Required</span></div>
-                      <p className="mt-1 text-xs leading-5 text-zinc-500">This status comes from macOS. Reopen MotionCam if access is enabled in Settings but no display is found.</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{isWindows ? "Windows needs no screen permission for recording. If no display is listed, reconnect the monitor and refresh." : "This status comes from macOS. Reopen MotionCam if access is enabled in Settings but no display is found."}</p>
                       {displayPermissionMessage && <p role="status" className="mt-2 text-xs leading-5 text-amber-200">{displayPermissionMessage}</p>}
                     </div>
                   </div>
@@ -165,7 +166,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     <Volume2 size={17} className="mt-0.5 shrink-0 text-zinc-400" />
                     <div>
                       <div className="text-sm font-medium">System audio <span className="text-zinc-500">Optional</span></div>
-                      <p className="mt-1 max-w-md text-xs leading-5 text-zinc-500">macOS provides no separate status check for system-audio recording. Verify it with a short recording after allowing MotionCam in Screen &amp; System Audio Recording.</p>
+                      <p className="mt-1 max-w-md text-xs leading-5 text-zinc-500">{isWindows ? "Windows records whatever is playing on your default output device. Verify it with a short recording." : "macOS provides no separate status check for system-audio recording. Verify it with a short recording after allowing MotionCam in Screen & System Audio Recording."}</p>
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">

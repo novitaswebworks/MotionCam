@@ -61,15 +61,20 @@ jobs:
         id: artifact
         run: |
           set -euxo pipefail
-          app="$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
+          dmg="$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$dmg"
+          # Tauri removes the .app after building the DMG, so inspect the app
+          # inside the DMG: that is the file users actually receive.
+          mountpoint="$(mktemp -d)"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mountpoint" "$dmg"
+          trap 'hdiutil detach "$mountpoint" -force || true' EXIT
+          app="$(find "$mountpoint" -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$app"
           executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
           architectures="$(lipo -archs "$app/Contents/MacOS/$executable")"
           echo "App executable architectures: $architectures"
           echo "$architectures" | grep -qw arm64
           echo "$architectures" | grep -qw x86_64
-          dmg="$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
-          test -n "$dmg"
           shasum -a 256 "$dmg" > "$dmg.sha256"
           echo "dmg=$dmg" >> "$GITHUB_OUTPUT"
 

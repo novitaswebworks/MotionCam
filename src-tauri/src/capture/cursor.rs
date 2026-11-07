@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, Write};
+#[cfg(not(target_os = "windows"))]
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::io::BufWriter;
+#[cfg(not(target_os = "windows"))]
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

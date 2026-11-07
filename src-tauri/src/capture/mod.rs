@@ -11,7 +11,9 @@ mod cursor_windows;
 pub mod windows;
 
 pub use audio::AudioDeviceInfo;
-use cursor::{CursorRecorder, DisplayBounds};
+use cursor::CursorRecorder;
+#[cfg(not(target_os = "windows"))]
+use cursor::DisplayBounds;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::Instant;

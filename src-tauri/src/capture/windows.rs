@@ -2,8 +2,8 @@ use crate::capture::DisplayInfo;
 use std::mem::size_of;
 use std::path::Path;
 use thiserror::Error;
-use windows::core::PCWSTR;
-use windows::Win32::Foundation::{BOOL, LPARAM, RECT, TRUE};
+use windows::core::{BOOL, PCWSTR};
+use windows::Win32::Foundation::{LPARAM, RECT};
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW, DEVMODEW, ENUM_CURRENT_SETTINGS,
     HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
@@ -83,7 +83,7 @@ unsafe extern "system" fn collect_monitor(
     if let Some(display) = describe_monitor(monitor, displays.len()) {
         displays.push(display);
     }
-    TRUE
+    BOOL::from(true)
 }
 
 fn describe_monitor(monitor: HMONITOR, index: usize) -> Option<DisplayInfo> {

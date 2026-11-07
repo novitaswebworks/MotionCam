@@ -111,8 +111,9 @@ impl WavWriter {
         // Calculate RMS audio level (0..100)
         let mut sum_sq: f64 = 0.0;
         let mut count = 0;
-        for chunk in pcm_bytes.chunks_exact(2) {
-            let sample = i16::from_le_bytes([chunk[0], chunk[1]]) as f64 / 32768.0;
+        let (samples, _) = pcm_bytes.as_chunks::<2>();
+        for sample_bytes in samples {
+            let sample = i16::from_le_bytes(*sample_bytes) as f64 / 32768.0;
             sum_sq += sample * sample;
             count += 1;
         }

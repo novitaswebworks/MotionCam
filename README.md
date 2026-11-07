@@ -65,7 +65,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ## Contributing
 
-We welcome bug reports, feature proposals, documentation, design feedback, and code contributions. Start with [CONTRIBUTING.md](CONTRIBUTING.md), browse open issues, or open an issue describing the problem you want to solve.
+We welcome bug reports, feature proposals, documentation, design feedback, and code contributions. Start with [CONTRIBUTING.md](CONTRIBUTING.md), browse [open issues](https://github.com/novitaswebworks/MotionCam/issues), or share questions and ideas in [Discussions](https://github.com/novitaswebworks/MotionCam/discussions).
 
 Useful early contributions include:
 

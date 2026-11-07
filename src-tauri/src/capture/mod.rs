@@ -167,13 +167,14 @@ impl ActiveRecordingSession {
         }
         .ok_or_else(|| RecordingError::Backend("Selected display is unavailable".into()))?;
 
-        let (capture_width, capture_height) =
-            capture_quality.resolution(display.width, display.height);
         // Windows records at the display's native size for now; the encoder
         // pads rather than scales, so the Full HD presets only change the fps.
         #[cfg(target_os = "windows")]
+        let size_quality = CaptureQuality::Source60;
+        #[cfg(not(target_os = "windows"))]
+        let size_quality = capture_quality;
         let (capture_width, capture_height) =
-            CaptureQuality::Source60.resolution(display.width, display.height);
+            size_quality.resolution(display.width, display.height);
         let capture_fps = capture_quality.fps();
         std::fs::create_dir_all(&dir)?;
 

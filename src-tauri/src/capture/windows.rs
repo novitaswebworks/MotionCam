@@ -1,3 +1,4 @@
+use crate::capture::audio_windows::AudioRequest;
 use crate::capture::cursor::DisplayBounds;
 use crate::capture::wgc::CaptureSession;
 use crate::capture::{CaptureStreamSettings, DisplayInfo};
@@ -39,12 +40,14 @@ impl WindowsScreenRecorder {
         output_file: P,
         target_display_id: u32,
         settings: CaptureStreamSettings,
+        audio: AudioRequest,
     ) -> Result<Self, WindowsCaptureError> {
         let handle = display_handle(target_display_id).ok_or_else(|| {
             WindowsCaptureError::WgcError("Selected display is unavailable".into())
         })?;
-        let session = CaptureSession::start(output_file.as_ref().to_path_buf(), handle, settings)
-            .map_err(WindowsCaptureError::WgcError)?;
+        let session =
+            CaptureSession::start(output_file.as_ref().to_path_buf(), handle, settings, audio)
+                .map_err(WindowsCaptureError::WgcError)?;
         Ok(Self { session })
     }
 

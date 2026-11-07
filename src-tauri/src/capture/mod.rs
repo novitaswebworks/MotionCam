@@ -6,6 +6,8 @@ pub mod webcam;
 pub mod macos;
 
 #[cfg(target_os = "windows")]
+mod audio_windows;
+#[cfg(target_os = "windows")]
 mod cursor_windows;
 #[cfg(target_os = "windows")]
 mod wgc;
@@ -137,8 +139,8 @@ impl ActiveRecordingSession {
         mic_device_id: Option<String>,
         capture_quality: CaptureQuality,
     ) -> Result<Self, RecordingError> {
-        // Audio capture is only wired up on macOS so far.
-        #[cfg(not(target_os = "macos"))]
+        // Audio capture exists only on macOS and Windows.
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let _ = (capture_audio, capture_microphone, &mic_device_id);
 
         // No video capture exists on other platforms. Refuse here so we never
@@ -228,6 +230,11 @@ impl ActiveRecordingSession {
                 width: capture_width,
                 height: capture_height,
                 fps: capture_fps,
+            },
+            audio_windows::AudioRequest {
+                system: capture_audio,
+                microphone: capture_microphone,
+                mic_device_id,
             },
         ) {
             Ok(recorder) => recorder,

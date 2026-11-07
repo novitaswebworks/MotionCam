@@ -3,6 +3,7 @@
 //! The cursor is never baked into the video (CLAUDE.md §1): it is recorded
 //! separately by the input hooks and drawn as a vector in post.
 
+use super::audio_windows::{AudioCapture, AudioRequest};
 use super::CaptureStreamSettings;
 use parking_lot::Mutex;
 use std::ffi::c_void;
@@ -39,6 +40,7 @@ struct Shared {
 struct Flags {
     path: PathBuf,
     settings: CaptureStreamSettings,
+    with_audio: bool,
     shared: Arc<Shared>,
 }
 
@@ -55,6 +57,7 @@ impl GraphicsCaptureApiHandler for Handler {
         let Flags {
             path,
             settings,
+            with_audio,
             shared,
         } = ctx.flags;
         let video = VideoSettingsBuilder::new(settings.width, settings.height)
@@ -63,7 +66,7 @@ impl GraphicsCaptureApiHandler for Handler {
             .bitrate(target_bitrate(settings));
         let encoder = VideoEncoder::new(
             video,
-            AudioSettingsBuilder::default().disabled(true),
+            AudioSettingsBuilder::default().disabled(!with_audio),
             ContainerSettingsBuilder::default(),
             path,
         )?;
@@ -114,6 +117,7 @@ fn target_bitrate(settings: CaptureStreamSettings) -> u32 {
 
 pub struct CaptureSession {
     control: Option<CaptureControl<Handler, BoxError>>,
+    audio: Option<AudioCapture>,
     shared: Arc<Shared>,
     started_at: Instant,
 }
@@ -123,6 +127,7 @@ impl CaptureSession {
         output_file: PathBuf,
         monitor_handle: isize,
         settings: CaptureStreamSettings,
+        audio: AudioRequest,
     ) -> Result<Self, String> {
         let shared = Arc::new(Shared::default());
         let monitor = Monitor::from_raw_hmonitor(monitor_handle as *mut c_void);
@@ -137,6 +142,7 @@ impl CaptureSession {
             Flags {
                 path: output_file,
                 settings,
+                with_audio: audio.any(),
                 shared: Arc::clone(&shared),
             },
         );
@@ -145,6 +151,7 @@ impl CaptureSession {
             .map_err(|e| format!("Could not start Windows screen capture: {e}"))?;
         let mut session = Self {
             control: Some(control),
+            audio: None,
             shared,
             started_at: Instant::now(),
         };
@@ -160,6 +167,29 @@ impl CaptureSession {
                 return Err(reason);
             }
             thread::sleep(Duration::from_millis(10));
+        }
+
+        if audio.any() {
+            let handler = session
+                .control
+                .as_ref()
+                .map(|c| c.callback())
+                .ok_or("Capture stopped unexpectedly")?;
+            let origin = session.capture_started_at();
+            let sink: super::audio_windows::AudioSink =
+                Box::new(move |bytes| match handler.lock().encoder.as_mut() {
+                    Some(encoder) => encoder
+                        .send_audio_buffer(bytes, 0)
+                        .map_err(|e| format!("Audio encoder failed: {e}")),
+                    None => Ok(()),
+                });
+            match AudioCapture::start(audio, origin, sink) {
+                Ok(capture) => session.audio = Some(capture),
+                Err(reason) => {
+                    let _ = session.stop();
+                    return Err(reason);
+                }
+            }
         }
         Ok(session)
     }
@@ -178,6 +208,11 @@ impl CaptureSession {
         let Some(control) = self.control.take() else {
             return Err("Capture already stopped".into());
         };
+        // Stop audio first so nothing is sent to a finishing encoder.
+        let audio_result = match self.audio.take() {
+            Some(mut audio) => audio.stop(),
+            None => Ok(()),
+        };
         let handler = control.callback();
         control
             .stop()
@@ -192,6 +227,7 @@ impl CaptureSession {
                 .map_err(|e| format!("Could not finish the video file: {e}"))?;
         }
 
+        audio_result?;
         if let Some(error) = self.shared.error.lock().clone() {
             return Err(error);
         }

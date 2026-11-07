@@ -1,7 +1,9 @@
+mod ffmpeg;
+
 use crate::project::{CameraKeyframe, McamProjectBundle};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -295,7 +297,7 @@ fn run_ffmpeg_export(
         keyframes,
     } = settings;
     let filter = build_camera_filter(&keyframes, trim_in, fps, width, height);
-    let mut command = Command::new("ffmpeg");
+    let mut command = ffmpeg::ffmpeg_command();
     command
         .args(["-hide_banner", "-loglevel", "error", "-nostats", "-n"])
         .arg("-ss")
@@ -315,10 +317,7 @@ fn run_ffmpeg_export(
     }
     match preset {
         ExportPreset::Mp4_4k60 | ExportPreset::Mp4_1080p60 => {
-            #[cfg(target_os = "macos")]
-            command.args(["-c:v", "h264_videotoolbox", "-b:v", "24M"]);
-            #[cfg(not(target_os = "macos"))]
-            command.args(["-c:v", "libx264", "-preset", "fast", "-crf", "18"]);
+            command.args(ffmpeg::h264_args());
             if include_audio {
                 command.args(["-c:a", "aac", "-b:a", "192k"]);
             }

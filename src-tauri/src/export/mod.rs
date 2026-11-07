@@ -459,3 +459,205 @@ fn keyframe_expression(
         expr
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::project::ZoomFocusMode;
+
+    fn kf(t: f64, x: f64, y: f64, zoom: f64) -> CameraKeyframe {
+        CameraKeyframe {
+            t,
+            x,
+            y,
+            zoom,
+            mode: ZoomFocusMode::default(),
+            duration_ms: None,
+        }
+    }
+
+    /// Extract the FFmpeg expression embedded in a quoted zoompan attribute.
+    fn expression_in<'a>(filter: &'a str, attribute: &str) -> &'a str {
+        let marker = format!("{attribute}='");
+        let start = filter.find(&marker).expect("attribute must be present") + marker.len();
+        let rest = &filter[start..];
+        let end = rest.find('\'').expect("attribute must be quoted");
+        &rest[..end]
+    }
+
+    /// Extract the FFmpeg expression embedded in `zoompan=z='...'`.
+    fn zoom_expression(filter: &str) -> &str {
+        expression_in(filter, "z")
+    }
+
+    #[test]
+    fn test_empty_keyframes_use_default_framing() {
+        // Without keyframes the camera rests at the frame center (0.5, 0.5)
+        // with zoom 1.0, starting at the trim-in timestamp (frame 0).
+        let filter = build_camera_filter(&[], 0.0, 30, 1920, 1080);
+        assert_eq!(
+            filter,
+            "scale=1920:1080:force_original_aspect_ratio=decrease,\
+             pad=1920:1080:(ow-iw)/2:(oh-ih)/2,\
+             zoompan=z='if(lt(on,0.000000),1.000000,1.000000)':\
+             x='max(0,min(iw-iw/zoom,iw*(if(lt(on,0.000000),0.500000,0.500000))-iw/(2*zoom)))':\
+             y='max(0,min(ih-ih/zoom,ih*(if(lt(on,0.000000),0.500000,0.500000))-ih/(2*zoom)))':\
+             d=1:s=1920x1080:fps=30"
+        );
+    }
+
+    #[test]
+    fn test_single_keyframe_pins_constant_camera() {
+        // A lone keyframe at t=500ms becomes frame 15 at 30fps and the camera
+        // holds its values for the whole render.
+        let keyframes = [kf(500.0, 0.25, 0.75, 2.0)];
+        let filter = build_camera_filter(&keyframes, 0.0, 30, 1280, 720);
+        assert_eq!(
+            filter,
+            "scale=1280:720:force_original_aspect_ratio=decrease,\
+             pad=1280:720:(ow-iw)/2:(oh-ih)/2,\
+             zoompan=z='if(lt(on,15.000000),2.000000,2.000000)':\
+             x='max(0,min(iw-iw/zoom,iw*(if(lt(on,15.000000),0.250000,0.250000))-iw/(2*zoom)))':\
+             y='max(0,min(ih-ih/zoom,ih*(if(lt(on,15.000000),0.750000,0.750000))-ih/(2*zoom)))':\
+             d=1:s=1280x720:fps=30"
+        );
+    }
+
+    #[test]
+    fn test_two_keyframes_smoothstep_interpolation() {
+        // Keyframes at 1000ms and 3000ms become frames 30 and 90 at 30fps, so
+        // the segment lasts 60 frames and interpolates with the smoothstep
+        // u*u*(3-2*u). Before frame 30 the first values hold; after frame 90
+        // the last values hold.
+        let keyframes = [kf(1000.0, 0.0, 0.25, 1.0), kf(3000.0, 1.0, 0.75, 3.0)];
+        let filter = build_camera_filter(&keyframes, 0.0, 30, 1920, 1080);
+        let eased = "((((on-30.000000)/60.000000))*(((on-30.000000)/60.000000))\
+                     *(3-2*(((on-30.000000)/60.000000))))";
+        assert_eq!(
+            zoom_expression(&filter),
+            "if(lt(on,30.000000),1.000000,\
+             if(lt(on,90.000000),(1.000000+(3.000000-1.000000)*EASED),3.000000))"
+                .replace("EASED", eased)
+        );
+        assert!(
+            filter.contains(
+                "iw*(if(lt(on,30.000000),0.000000,\
+                 if(lt(on,90.000000),(0.000000+(1.000000-0.000000)*EASED),1.000000)))"
+                    .replace("EASED", eased)
+                    .as_str()
+            ),
+            "x interpolation between 0.0 and 1.0 is missing: {filter}"
+        );
+        assert!(
+            filter.contains("0.250000") && filter.contains("(0.750000-0.250000)"),
+            "y interpolation between 0.25 and 0.75 is missing: {filter}"
+        );
+        assert!(filter.ends_with(":d=1:s=1920x1080:fps=30"));
+    }
+
+    #[test]
+    fn test_trim_offsets_shift_and_clamp_keyframe_frames() {
+        // trim_in=1000ms at 50fps: t=500ms clamps to frame 0, t=2000ms lands on
+        // frame 50, and t=4000ms lands on frame 150. Segment lengths follow the
+        // trimmed timeline (50 and 100 frames).
+        let keyframes = [
+            kf(500.0, 0.1, 0.5, 1.0),
+            kf(2000.0, 0.2, 0.5, 1.0),
+            kf(4000.0, 0.8, 0.5, 1.0),
+        ];
+        let filter = build_camera_filter(&keyframes, 1000.0, 50, 640, 360);
+        assert!(
+            filter.contains("if(lt(on,0.000000),0.100000"),
+            "keyframe before trim_in must clamp to frame 0: {filter}"
+        );
+        assert!(
+            filter.contains("(0.100000+(0.200000-0.100000)*") && filter.contains("/50.000000)"),
+            "first segment must span frames 0..50: {filter}"
+        );
+        assert!(
+            filter.contains("lt(on,150.000000),(0.200000+(0.800000-0.200000)*")
+                && filter.contains("/100.000000)"),
+            "second segment must span frames 50..150: {filter}"
+        );
+        assert!(
+            expression_in(&filter, "x").contains(",0.800000)))"),
+            "camera must settle on the last keyframe value after frame 150: {filter}"
+        );
+        assert!(filter.contains(":fps=50"));
+    }
+
+    #[test]
+    fn test_non_finite_keyframes_are_dropped() {
+        // Keyframes with any non-finite field are filtered out; the remaining
+        // valid keyframe alone drives the camera (t=1000ms -> frame 30).
+        let keyframes = [
+            kf(f64::NAN, 0.0, 0.0, 1.0),
+            kf(1000.0, f64::INFINITY, 0.5, 2.0),
+            kf(1000.0, 0.25, 0.5, 2.0),
+        ];
+        let filter = build_camera_filter(&keyframes, 0.0, 30, 1920, 1080);
+        assert_eq!(
+            zoom_expression(&filter),
+            "if(lt(on,30.000000),2.000000,2.000000)"
+        );
+
+        // If nothing survives the filter, the default framing kicks in.
+        let keyframes = [kf(f64::NAN, 0.0, 0.0, 1.0), kf(1000.0, 0.0, f64::NAN, 1.0)];
+        let filter = build_camera_filter(&keyframes, 0.0, 30, 1920, 1080);
+        assert_eq!(
+            zoom_expression(&filter),
+            "if(lt(on,0.000000),1.000000,1.000000)"
+        );
+        assert!(filter.contains("iw*(if(lt(on,0.000000),0.500000,0.500000))"));
+        assert!(filter.contains("ih*(if(lt(on,0.000000),0.500000,0.500000))"));
+    }
+
+    #[test]
+    fn test_duplicate_timestamps_interpolate_to_first_and_settle_on_last() {
+        // Two keyframes share t=1000ms (frame 30): the zero-length segment
+        // between them is skipped, so the camera interpolates toward the first
+        // duplicate's value until frame 30 and then rests on the second
+        // duplicate's value (0.4) for the rest of the render.
+        let keyframes = [
+            kf(0.0, 0.0, 0.5, 1.0),
+            kf(1000.0, 1.0, 0.5, 2.0),
+            kf(1000.0, 0.4, 0.5, 4.0),
+        ];
+        let filter = build_camera_filter(&keyframes, 0.0, 30, 800, 600);
+        let eased = "((((on-0.000000)/30.000000))*(((on-0.000000)/30.000000))\
+                     *(3-2*(((on-0.000000)/30.000000))))";
+        assert_eq!(
+            zoom_expression(&filter),
+            "if(lt(on,0.000000),1.000000,\
+             if(lt(on,30.000000),(1.000000+(2.000000-1.000000)*EASED),4.000000))"
+                .replace("EASED", eased)
+        );
+        assert_eq!(
+            expression_in(&filter, "x"),
+            "max(0,min(iw-iw/zoom,iw*(if(lt(on,0.000000),0.000000,\
+             if(lt(on,30.000000),(0.000000+(1.000000-0.000000)*EASED),0.400000)))-iw/(2*zoom)))"
+                .replace("EASED", eased)
+        );
+    }
+
+    #[test]
+    fn test_camera_values_are_clamped_to_valid_ranges() {
+        // zoom is clamped to [1.0, 8.0] and focus to [0.0, 1.0] before the
+        // expression is built.
+        let keyframes = [kf(0.0, -3.0, 2.0, 100.0)];
+        let filter = build_camera_filter(&keyframes, 0.0, 30, 1920, 1080);
+        assert_eq!(
+            zoom_expression(&filter),
+            "if(lt(on,0.000000),8.000000,8.000000)"
+        );
+        assert!(filter.contains("iw*(if(lt(on,0.000000),0.000000,0.000000))"));
+        assert!(filter.contains("ih*(if(lt(on,0.000000),1.000000,1.000000))"));
+
+        let keyframes = [kf(0.0, 0.5, 0.5, 0.5)];
+        let filter = build_camera_filter(&keyframes, 0.0, 30, 1920, 1080);
+        assert_eq!(
+            zoom_expression(&filter),
+            "if(lt(on,0.000000),1.000000,1.000000)"
+        );
+    }
+}

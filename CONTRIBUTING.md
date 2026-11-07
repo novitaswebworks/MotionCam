@@ -4,7 +4,7 @@ Thanks for helping make MotionCam a useful free alternative to Screen Studio. Th
 
 ## Before starting
 
-1. Check the repository's Issues tab and [implementation plan](IMPLEMENTATION_PLAN.md).
+1. Check the [open issues](https://github.com/novitaswebworks/MotionCam/issues) and [implementation plan](IMPLEMENTATION_PLAN.md).
 2. For a large change, open an issue first so the scope and acceptance criteria are clear.
 3. Do not include recordings, screenshots, logs, or project bundles containing personal information unless you have reviewed and intentionally sanitized them.
 

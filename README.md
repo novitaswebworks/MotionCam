@@ -44,13 +44,13 @@ We want these limitations visible so users can make informed choices and contrib
 ### Run from source
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/novitaswebworks/MotionCam.git
 cd MotionCam
 pnpm install
 pnpm tauri dev
 ```
 
-Replace `<repository-url>` with the URL for the public GitHub repository. The first recording may prompt macOS for Screen & System Audio Recording and microphone permissions.
+The first recording may prompt macOS for Screen & System Audio Recording and microphone permissions.
 
 ### Build and check
 

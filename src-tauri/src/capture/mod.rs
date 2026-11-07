@@ -6,6 +6,8 @@ pub mod webcam;
 pub mod macos;
 
 #[cfg(target_os = "windows")]
+mod cursor_windows;
+#[cfg(target_os = "windows")]
 pub mod windows;
 
 pub use audio::AudioDeviceInfo;
@@ -174,7 +176,14 @@ impl ActiveRecordingSession {
                 height: rect.size.height,
             }
         };
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        let Some(bounds) = windows::display_bounds(display.id) else {
+            let _ = std::fs::remove_dir_all(&dir);
+            return Err(RecordingError::Backend(
+                "Selected display is unavailable".into(),
+            ));
+        };
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let bounds = DisplayBounds::default();
 
         // Start native capture first so cursor timestamps do not include cursor-tap

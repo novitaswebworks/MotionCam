@@ -1,3 +1,4 @@
+use crate::capture::cursor::DisplayBounds;
 use crate::capture::DisplayInfo;
 use std::mem::size_of;
 use std::path::Path;
@@ -30,30 +31,7 @@ pub struct WindowsScreenRecorder;
 impl WindowsScreenRecorder {
     /// Lists attached monitors with their true pixel size and DPI scale.
     pub fn list_displays() -> Result<Vec<DisplayInfo>, WindowsCaptureError> {
-        let mut displays: Vec<DisplayInfo> = Vec::new();
-
-        // SAFETY: the callback only runs during this call and `displays`
-        // outlives it, so the pointer smuggled through LPARAM stays valid.
-        let ok = unsafe {
-            EnumDisplayMonitors(
-                None,
-                None,
-                Some(collect_monitor),
-                LPARAM(&mut displays as *mut Vec<DisplayInfo> as isize),
-            )
-        };
-        if !ok.as_bool() {
-            return Err(WindowsCaptureError::WgcError(
-                "Could not enumerate displays".into(),
-            ));
-        }
-        if displays.is_empty() {
-            return Err(WindowsCaptureError::WgcError("No displays found".into()));
-        }
-
-        // Primary first, then by id, so the default pick matches what users expect.
-        displays.sort_by_key(|d| (!d.is_primary, d.id));
-        Ok(displays)
+        Ok(enumerate_monitors()?.into_iter().map(|m| m.info).collect())
     }
 
     pub fn start<P: AsRef<Path>>(
@@ -72,21 +50,63 @@ impl WindowsScreenRecorder {
     }
 }
 
+struct MonitorEntry {
+    info: DisplayInfo,
+    /// Monitor rectangle in the same coordinate space the input hooks report.
+    bounds: DisplayBounds,
+}
+
+fn enumerate_monitors() -> Result<Vec<MonitorEntry>, WindowsCaptureError> {
+    let mut monitors: Vec<MonitorEntry> = Vec::new();
+
+    // SAFETY: the callback only runs during this call and `monitors`
+    // outlives it, so the pointer smuggled through LPARAM stays valid.
+    let ok = unsafe {
+        EnumDisplayMonitors(
+            None,
+            None,
+            Some(collect_monitor),
+            LPARAM(&mut monitors as *mut Vec<MonitorEntry> as isize),
+        )
+    };
+    if !ok.as_bool() {
+        return Err(WindowsCaptureError::WgcError(
+            "Could not enumerate displays".into(),
+        ));
+    }
+    if monitors.is_empty() {
+        return Err(WindowsCaptureError::WgcError("No displays found".into()));
+    }
+
+    // Primary first, then by id, so the default pick matches what users expect.
+    monitors.sort_by_key(|m| (!m.info.is_primary, m.info.id));
+    Ok(monitors)
+}
+
+/// Bounds of a listed display, for normalizing cursor coordinates.
+pub fn display_bounds(display_id: u32) -> Option<DisplayBounds> {
+    enumerate_monitors()
+        .ok()?
+        .into_iter()
+        .find(|m| m.info.id == display_id)
+        .map(|m| m.bounds)
+}
+
 unsafe extern "system" fn collect_monitor(
     monitor: HMONITOR,
     _hdc: HDC,
     _rect: *mut RECT,
     data: LPARAM,
 ) -> BOOL {
-    // SAFETY: `data` is the `&mut Vec<DisplayInfo>` passed by `list_displays`.
-    let displays = unsafe { &mut *(data.0 as *mut Vec<DisplayInfo>) };
-    if let Some(display) = describe_monitor(monitor, displays.len()) {
-        displays.push(display);
+    // SAFETY: `data` is the `&mut Vec<MonitorEntry>` passed by `enumerate_monitors`.
+    let monitors = unsafe { &mut *(data.0 as *mut Vec<MonitorEntry>) };
+    if let Some(entry) = describe_monitor(monitor, monitors.len()) {
+        monitors.push(entry);
     }
     BOOL::from(true)
 }
 
-fn describe_monitor(monitor: HMONITOR, index: usize) -> Option<DisplayInfo> {
+fn describe_monitor(monitor: HMONITOR, index: usize) -> Option<MonitorEntry> {
     let mut info = MONITORINFOEXW::default();
     info.monitorInfo.cbSize = size_of::<MONITORINFOEXW>() as u32;
     // SAFETY: MONITORINFOEXW begins with a MONITORINFO and cbSize says so.
@@ -117,13 +137,22 @@ fn describe_monitor(monitor: HMONITOR, index: usize) -> Option<DisplayInfo> {
     }
 
     let number = display_number(&device_name).unwrap_or(index as u32 + 1);
-    Some(DisplayInfo {
-        id: number,
-        name: format!("Display {number}"),
-        width,
-        height,
-        scale_factor: monitor_scale_factor(monitor),
-        is_primary,
+    let rect = info.monitorInfo.rcMonitor;
+    Some(MonitorEntry {
+        info: DisplayInfo {
+            id: number,
+            name: format!("Display {number}"),
+            width,
+            height,
+            scale_factor: monitor_scale_factor(monitor),
+            is_primary,
+        },
+        bounds: DisplayBounds {
+            origin_x: f64::from(rect.left),
+            origin_y: f64::from(rect.top),
+            width: f64::from(rect.right - rect.left),
+            height: f64::from(rect.bottom - rect.top),
+        },
     })
 }
 

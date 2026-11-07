@@ -251,7 +251,22 @@ impl CursorRecorder {
                 }
             }
 
-            #[cfg(not(target_os = "macos"))]
+            // Windows has no fake fallback: if the hooks fail the recording
+            // fails loudly instead of logging a cursor frozen mid-screen.
+            #[cfg(target_os = "windows")]
+            {
+                if let Err(message) = super::cursor_windows::run_windows_tap(
+                    running_clone,
+                    &mut writer,
+                    bounds,
+                    start_instant,
+                    Arc::clone(&worker_error),
+                ) {
+                    *worker_error.lock() = Some(message);
+                }
+            }
+
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             {
                 let _ = worker_error;
                 Self::run_polling_tap(running_clone, &mut writer, bounds, start_instant);
@@ -435,6 +450,7 @@ impl CursorRecorder {
     }
 
     /// Resilient cross-platform polling tap used as fallback or when permissions are restricted.
+    #[cfg(not(target_os = "windows"))]
     fn run_polling_tap(
         running: Arc<AtomicBool>,
         writer: &mut BufWriter<File>,

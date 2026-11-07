@@ -32,12 +32,15 @@ impl AudioDeviceInfo {
 
         #[cfg(target_os = "windows")]
         {
-            return super::audio_windows::list_input_devices();
+            super::audio_windows::list_input_devices()
         }
 
         // An empty list is truthful when the platform has no implemented device
         // enumeration path or when macOS reports no available inputs.
-        Vec::new()
+        #[cfg(not(target_os = "windows"))]
+        {
+            Vec::new()
+        }
     }
 }
 

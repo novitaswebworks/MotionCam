@@ -1,0 +1,85 @@
+name: Release macOS
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  universal-macos:
+    name: Build and publish universal macOS DMG
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.16.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          components: clippy,rustfmt
+
+      - name: Verify tag matches app version
+        if: github.ref_type == 'tag'
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          app_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
+          test "$tag_version" = "$app_version"
+
+      - name: Install macOS targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build universal DMG
+        run: pnpm tauri build --target universal-apple-darwin --bundles dmg
+
+      - name: Verify both architectures and create checksum
+        id: artifact
+        run: |
+          app="$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$app"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+          architectures="$(lipo -archs "$app/Contents/MacOS/$executable")"
+          echo "$architectures" | grep -qw arm64
+          echo "$architectures" | grep -qw x86_64
+          dmg="$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$dmg"
+          shasum -a 256 "$dmg" > "$dmg.sha256"
+          echo "dmg=$dmg" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "${{ steps.artifact.outputs.dmg }}" \
+            "${{ steps.artifact.outputs.dmg }}.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "MotionCam $GITHUB_REF_NAME" \
+            --notes-file CHANGELOG.md

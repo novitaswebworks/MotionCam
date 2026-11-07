@@ -35,6 +35,14 @@ We want these limitations visible so users can make informed choices and contrib
 
 ## Get started
 
+### Download for macOS
+
+Download the universal DMG from [GitHub Releases](https://github.com/novitaswebworks/MotionCam/releases/latest). It supports both Apple Silicon and Intel Macs running macOS 15 or newer.
+
+The v0.2.0 build is ad-hoc signed and not notarized. macOS may ask you to approve the app the first time you open it: Control-click MotionCam in Applications, choose **Open**, then confirm. A Developer ID signature and Apple notarization are still needed for a warning-free first launch.
+
+For social posts, [download the MotionCam promotional artwork](docs/images/motioncam-social.png). The app shown in the artwork is illustrative, not a literal screenshot.
+
 ### Requirements
 
 - macOS 15 or newer for native screen recording.

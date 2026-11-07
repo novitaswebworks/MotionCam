@@ -129,6 +129,10 @@ impl ActiveRecordingSession {
         mic_device_id: Option<String>,
         capture_quality: CaptureQuality,
     ) -> Result<Self, RecordingError> {
+        // Audio capture is only wired up on macOS so far.
+        #[cfg(not(target_os = "macos"))]
+        let _ = (capture_audio, capture_microphone, &mic_device_id);
+
         let dir = project_dir.as_ref().to_path_buf();
         if dir.exists() {
             return Err(RecordingError::Backend(

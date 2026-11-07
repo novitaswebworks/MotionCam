@@ -253,6 +253,7 @@ impl CursorRecorder {
 
             #[cfg(not(target_os = "macos"))]
             {
+                let _ = worker_error;
                 Self::run_polling_tap(running_clone, &mut writer, bounds, start_instant);
             }
         });

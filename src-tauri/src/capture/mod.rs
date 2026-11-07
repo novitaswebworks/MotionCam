@@ -133,6 +133,14 @@ impl ActiveRecordingSession {
         #[cfg(not(target_os = "macos"))]
         let _ = (capture_audio, capture_microphone, &mic_device_id);
 
+        // Windows can list displays now, but there is no video capture behind
+        // it yet. Refuse here so we never write a project with no video.
+        if cfg!(not(target_os = "macos")) {
+            return Err(RecordingError::Backend(
+                "Screen recording is not implemented on this platform yet".into(),
+            ));
+        }
+
         let dir = project_dir.as_ref().to_path_buf();
         if dir.exists() {
             return Err(RecordingError::Backend(
@@ -249,7 +257,12 @@ impl ActiveRecordingSession {
             macos::MacScreenRecorder::list_displays()
                 .map_err(|e| RecordingError::Backend(e.to_string()))
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        {
+            windows::WindowsScreenRecorder::list_displays()
+                .map_err(|e| RecordingError::Backend(e.to_string()))
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             Err(RecordingError::Backend(
                 "Screen recording is not implemented on this platform".into(),

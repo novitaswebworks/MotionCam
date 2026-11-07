@@ -1,6 +1,6 @@
 [package]
 name = "motioncam"
-version = "0.2.0"
+version = "0.2.1"
 description = "Cinematic Screen Studio alternative"
 edition = "2021"
 

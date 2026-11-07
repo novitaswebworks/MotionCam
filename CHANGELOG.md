@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.2.1
+
+First Windows build of MotionCam. It is a test release: recording has been built and checked in CI but not yet run on a real Windows PC.
+
+### Included
+
+- Windows installer (x64) with FFmpeg bundled for export.
+- Screen recording through Windows Graphics Capture, saved as H.264 without the cursor baked in.
+- System sound and microphone recording, mixed into the video.
+- Mouse and keystroke capture for cursor overlays and zoom targeting.
+- Windows wording and Settings links in first-run setup.
+- Export finds FFmpeg beside the app and uses Windows' built-in H.264 encoder when the FFmpeg build has no libx264.
+
+### Known limitations
+
+- The installer is not code-signed, so Windows SmartScreen will warn on first run.
+- Windows records at the display's native resolution; the Full HD presets only change the frame rate.
+- Recording and audio sync still need validation on real hardware, including multi-monitor and scaled displays.
+- The macOS app is unchanged from v0.2.0.
+
 ## v0.2.0
 
 First public universal macOS release of MotionCam.

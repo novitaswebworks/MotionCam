@@ -1,0 +1,27 @@
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.tsbuildinfo
+
+# Tauri / Rust
+src-tauri/target/
+target/
+
+# Logs & temp
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.pnpm-store
+
+# OS files
+.DS_Store
+Thumbs.db
+.claude-flow/
+
+# Project test outputs
+*.mcam/
+*.mp4
+*.jsonl

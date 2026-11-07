@@ -1,0 +1,114 @@
+name: Release Windows
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # LGPL build: no libx264, so MotionCam falls back to Media Foundation H.264
+  # and we do not take on GPL redistribution duties.
+  FFMPEG_ASSET: ffmpeg-n8.1-latest-win64-lgpl-8.1.zip
+  FFMPEG_RELEASE_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest
+
+jobs:
+  windows-installer:
+    name: Build and publish Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.16.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+
+      - name: Verify tag matches app version
+        if: github.ref_type == 'tag'
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          app_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
+          test "$tag_version" = "$app_version"
+
+      - name: Download and verify FFmpeg
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/ffmpeg-dl" src-tauri/ffmpeg
+          cd "$RUNNER_TEMP/ffmpeg-dl"
+          curl -fsSL -o "$FFMPEG_ASSET" "$FFMPEG_RELEASE_URL/$FFMPEG_ASSET"
+          curl -fsSL -o checksums.sha256 "$FFMPEG_RELEASE_URL/checksums.sha256"
+          grep " $FFMPEG_ASSET\$" checksums.sha256 | sha256sum -c -
+          unzip -q "$FFMPEG_ASSET"
+          exe="$(find . -path '*/bin/ffmpeg.exe' -print -quit)"
+          test -n "$exe"
+          cp "$exe" "$GITHUB_WORKSPACE/src-tauri/ffmpeg/ffmpeg.exe"
+          "$GITHUB_WORKSPACE/src-tauri/ffmpeg/ffmpeg.exe" -hide_banner -encoders | grep -E "h264_mf|libvpx-vp9|prores_ks"
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Windows installer
+        run: pnpm tauri build --bundles nsis --config src-tauri/tauri.windows-release.json
+
+      - name: Verify installer and create checksum
+        id: artifact
+        run: |
+          set -euxo pipefail
+          installer="$(find src-tauri/target/release/bundle/nsis -maxdepth 1 -name '*.exe' -print -quit)"
+          test -n "$installer"
+          test "$(stat -c %s "$installer")" -gt 5000000
+          sha256sum "$installer" > "$installer.sha256"
+          echo "installer=$installer" >> "$GITHUB_OUTPUT"
+
+      - name: Keep installer from dispatch runs
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            ${{ steps.artifact.outputs.installer }}
+            ${{ steps.artifact.outputs.installer }}.sha256
+          retention-days: 7
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          files=("${{ steps.artifact.outputs.installer }}" "${{ steps.artifact.outputs.installer }}.sha256")
+          # The macOS workflow publishes the same tag; whichever finishes first
+          # creates the release and the other adds its files to it.
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            if gh release create "$GITHUB_REF_NAME" "${files[@]}" \
+              --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "MotionCam $GITHUB_REF_NAME" --notes-file CHANGELOG.md; then
+              exit 0
+            fi
+          fi
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber

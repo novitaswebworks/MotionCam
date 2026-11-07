@@ -83,10 +83,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            "${{ steps.artifact.outputs.dmg }}" \
-            "${{ steps.artifact.outputs.dmg }}.sha256" \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
-            --title "MotionCam $GITHUB_REF_NAME" \
-            --notes-file CHANGELOG.md
+          set -euxo pipefail
+          files=("${{ steps.artifact.outputs.dmg }}" "${{ steps.artifact.outputs.dmg }}.sha256")
+          # The Windows workflow publishes the same tag; whichever finishes
+          # first creates the release and the other adds its files to it.
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            if gh release create "$GITHUB_REF_NAME" "${files[@]}" \
+              --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "MotionCam $GITHUB_REF_NAME" --notes-file CHANGELOG.md; then
+              exit 0
+            fi
+          fi
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber

@@ -25,3 +25,4 @@ Thumbs.db
 *.mcam/
 *.mp4
 *.jsonl
+src-tauri/ffmpeg/

@@ -305,8 +305,10 @@ impl Resampler {
         if (self.step - 1.0).abs() < f64::EPSILON {
             return stereo.to_vec();
         }
-        self.carry
-            .extend(stereo.chunks_exact(2).map(|f| [f[0], f[1]]));
+        let mut frames = stereo.iter().copied();
+        while let (Some(left), Some(right)) = (frames.next(), frames.next()) {
+            self.carry.push([left, right]);
+        }
 
         let mut out = Vec::new();
         while self.position + 1.0 < self.carry.len() as f64 {

@@ -1,7 +1,9 @@
 use crate::capture::cursor::DisplayBounds;
-use crate::capture::DisplayInfo;
+use crate::capture::wgc::CaptureSession;
+use crate::capture::{CaptureStreamSettings, DisplayInfo};
 use std::mem::size_of;
 use std::path::Path;
+use std::time::Instant;
 use thiserror::Error;
 use windows::core::{BOOL, PCWSTR};
 use windows::Win32::Foundation::{LPARAM, RECT};
@@ -17,16 +19,15 @@ pub enum WindowsCaptureError {
     WgcError(String),
 }
 
-const NOT_IMPLEMENTED: &str = "Screen recording is not implemented on Windows yet";
-
 /// `MONITORINFOF_PRIMARY` from winuser.h.
 const MONITORINFO_PRIMARY_FLAG: u32 = 1;
 /// Windows reports 96 DPI at 100% scaling.
 const BASE_DPI: f64 = 96.0;
 
-/// Windows Graphics Capture is not implemented yet. Display listing is real;
-/// starting a recording still fails loudly instead of writing empty files.
-pub struct WindowsScreenRecorder;
+/// Records one display with Windows Graphics Capture into an H.264 MP4.
+pub struct WindowsScreenRecorder {
+    session: CaptureSession,
+}
 
 impl WindowsScreenRecorder {
     /// Lists attached monitors with their true pixel size and DPI scale.
@@ -35,18 +36,28 @@ impl WindowsScreenRecorder {
     }
 
     pub fn start<P: AsRef<Path>>(
-        _output_file: P,
-        _target_display_id: Option<u32>,
+        output_file: P,
+        target_display_id: u32,
+        settings: CaptureStreamSettings,
     ) -> Result<Self, WindowsCaptureError> {
-        Err(WindowsCaptureError::WgcError(NOT_IMPLEMENTED.into()))
+        let handle = display_handle(target_display_id).ok_or_else(|| {
+            WindowsCaptureError::WgcError("Selected display is unavailable".into())
+        })?;
+        let session = CaptureSession::start(output_file.as_ref().to_path_buf(), handle, settings)
+            .map_err(WindowsCaptureError::WgcError)?;
+        Ok(Self { session })
+    }
+
+    pub fn capture_started_at(&self) -> Instant {
+        self.session.capture_started_at()
     }
 
     pub fn stop(&mut self) -> Result<u64, WindowsCaptureError> {
-        Err(WindowsCaptureError::WgcError(NOT_IMPLEMENTED.into()))
+        self.session.stop().map_err(WindowsCaptureError::WgcError)
     }
 
     pub fn frame_count(&self) -> u64 {
-        0
+        self.session.frame_count()
     }
 }
 
@@ -54,6 +65,8 @@ struct MonitorEntry {
     info: DisplayInfo,
     /// Monitor rectangle in the same coordinate space the input hooks report.
     bounds: DisplayBounds,
+    /// Raw HMONITOR, valid while the monitor stays attached.
+    handle: isize,
 }
 
 fn enumerate_monitors() -> Result<Vec<MonitorEntry>, WindowsCaptureError> {
@@ -81,6 +94,15 @@ fn enumerate_monitors() -> Result<Vec<MonitorEntry>, WindowsCaptureError> {
     // Primary first, then by id, so the default pick matches what users expect.
     monitors.sort_by_key(|m| (!m.info.is_primary, m.info.id));
     Ok(monitors)
+}
+
+/// Native monitor handle of a listed display, for starting capture.
+fn display_handle(display_id: u32) -> Option<isize> {
+    enumerate_monitors()
+        .ok()?
+        .into_iter()
+        .find(|m| m.info.id == display_id)
+        .map(|m| m.handle)
 }
 
 /// Bounds of a listed display, for normalizing cursor coordinates.
@@ -153,6 +175,7 @@ fn describe_monitor(monitor: HMONITOR, index: usize) -> Option<MonitorEntry> {
             width: f64::from(rect.right - rect.left),
             height: f64::from(rect.bottom - rect.top),
         },
+        handle: monitor.0 as isize,
     })
 }
 

@@ -8,6 +8,8 @@ pub mod macos;
 #[cfg(target_os = "windows")]
 mod cursor_windows;
 #[cfg(target_os = "windows")]
+mod wgc;
+#[cfg(target_os = "windows")]
 pub mod windows;
 
 pub use audio::AudioDeviceInfo;
@@ -119,7 +121,9 @@ pub struct ActiveRecordingSession {
     cursor_recorder: CursorRecorder,
     #[cfg(target_os = "macos")]
     screen_recorder: macos::MacScreenRecorder,
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    screen_recorder: windows::WindowsScreenRecorder,
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     #[allow(dead_code)]
     screen_recorder_frames: u64,
 }
@@ -137,9 +141,9 @@ impl ActiveRecordingSession {
         #[cfg(not(target_os = "macos"))]
         let _ = (capture_audio, capture_microphone, &mic_device_id);
 
-        // Windows can list displays now, but there is no video capture behind
-        // it yet. Refuse here so we never write a project with no video.
-        if cfg!(not(target_os = "macos")) {
+        // No video capture exists on other platforms. Refuse here so we never
+        // write a project with no video.
+        if cfg!(not(any(target_os = "macos", target_os = "windows"))) {
             return Err(RecordingError::Backend(
                 "Screen recording is not implemented on this platform yet".into(),
             ));
@@ -165,6 +169,11 @@ impl ActiveRecordingSession {
 
         let (capture_width, capture_height) =
             capture_quality.resolution(display.width, display.height);
+        // Windows records at the display's native size for now; the encoder
+        // pads rather than scales, so the Full HD presets only change the fps.
+        #[cfg(target_os = "windows")]
+        let (capture_width, capture_height) =
+            CaptureQuality::Source60.resolution(display.width, display.height);
         let capture_fps = capture_quality.fps();
         std::fs::create_dir_all(&dir)?;
 
@@ -210,18 +219,35 @@ impl ActiveRecordingSession {
             }
         };
 
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
+        let mut screen_recorder = match windows::WindowsScreenRecorder::start(
+            &source_video_path,
+            display.id,
+            CaptureStreamSettings {
+                width: capture_width,
+                height: capture_height,
+                fps: capture_fps,
+            },
+        ) {
+            Ok(recorder) => recorder,
+            Err(error) => {
+                let _ = std::fs::remove_dir_all(&dir);
+                return Err(RecordingError::Backend(error.to_string()));
+            }
+        };
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let screen_recorder_frames = 0;
 
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         let start_instant = screen_recorder.capture_started_at();
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let start_instant = Instant::now();
 
         let cursor_recorder = match CursorRecorder::start(&cursor_log_path, bounds, start_instant) {
             Ok(recorder) => recorder,
             Err(error) => {
-                #[cfg(target_os = "macos")]
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
                 let _ = screen_recorder.stop();
                 let _ = std::fs::remove_dir_all(&dir);
                 return Err(error.into());
@@ -238,9 +264,9 @@ impl ActiveRecordingSession {
             capture_height,
             capture_fps,
             cursor_recorder,
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             screen_recorder,
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             screen_recorder_frames,
         })
     }
@@ -249,13 +275,13 @@ impl ActiveRecordingSession {
         let duration_ms = self.start_instant.elapsed().as_secs_f64() * 1000.0;
         let cursor_result = self.cursor_recorder.stop();
 
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         let frames = self
             .screen_recorder
             .stop()
             .map_err(|e| RecordingError::Backend(e.to_string()))?;
 
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let frames = self.screen_recorder_frames;
 
         cursor_result?;
@@ -329,11 +355,11 @@ impl ActiveRecordingSession {
     }
 
     pub fn frame_count(&self) -> u64 {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         {
             self.screen_recorder.frame_count()
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
             0
         }

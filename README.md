@@ -2,7 +2,7 @@
 
 **A free, open-source Screen Studio alternative for macOS.** Record your screen, shape the camera movement in an editor, and export a polished video. The project is early and actively looking for contributors.
 
-> **Current status:** macOS capture requires macOS 15 or newer. Windows capture and Linux capture are not implemented. Some editor and export features are still incomplete; see [what works and what needs help](#project-status).
+> **Current status:** macOS capture requires macOS 15 or newer. Windows capture is a test build (see the Windows download below) and Linux capture is not implemented. Some editor and export features are still incomplete; see [what works and what needs help](#project-status).
 
 ## Why MotionCam?
 
@@ -28,7 +28,7 @@ The native recording flow and MP4 audio stream have been exercised locally. Micr
 - Preview and exported video do not yet render the same composition. Export currently applies trims and camera keyframes, but does not composite the styled canvas, cursor overlay, webcam, subtitles, or speed ramps.
 - Separate microphone and system-audio tracks, a format-aware live audio meter, and reliable audio mixing.
 - Real webcam recording, speech-to-text, and recorded audio waveforms. Some of these controls or previews are not functional yet.
-- Windows Graphics Capture and Linux/PipeWire recording.
+- Real-hardware validation of Windows recording (a test build exists) and Linux/PipeWire recording.
 - Undo/redo, robust project migration, and long-session performance validation.
 
 We want these limitations visible so users can make informed choices and contributors can pick concrete work.
@@ -39,7 +39,13 @@ We want these limitations visible so users can make informed choices and contrib
 
 Download the universal DMG from [GitHub Releases](https://github.com/novitaswebworks/MotionCam/releases/latest). It supports both Apple Silicon and Intel Macs running macOS 15 or newer.
 
-The v0.2.0 build is ad-hoc signed and not notarized. macOS may ask you to approve the app the first time you open it: Control-click MotionCam in Applications, choose **Open**, then confirm. A Developer ID signature and Apple notarization are still needed for a warning-free first launch.
+Each macOS build is ad-hoc signed and not notarized. macOS may ask you to approve the app the first time you open it: Control-click MotionCam in Applications, choose **Open**, then confirm. A Developer ID signature and Apple notarization are still needed for a warning-free first launch.
+
+### Download for Windows (test build)
+
+Download `MotionCam_<version>_x64-setup.exe` from the [v0.2.1 pre-release](https://github.com/novitaswebworks/MotionCam/releases/tag/v0.2.1). Pre-releases do not appear under "latest", so use this link. It needs Windows 10 version 2004 or newer.
+
+This build is unsigned, so Windows SmartScreen will warn on first run: choose **More info**, then **Run anyway**. Recording has been built and checked in CI but not yet run on real hardware, so please report what you find.
 
 For social posts, [download the MotionCam promotional artwork](docs/images/motioncam-social.png). The app shown in the artwork is illustrative, not a literal screenshot.
 
@@ -81,7 +87,7 @@ Useful early contributions include:
 - Designing a shared preview/export composition pipeline.
 - Replacing synthetic timeline waveforms with peaks from recorded audio.
 - Testing project save/reopen, export formats, and long recordings on macOS.
-- Building and validating the Windows capture backend.
+- Testing the Windows build on real PCs: multi-monitor, scaled displays, audio sync, and export.
 
 ### Reporting bugs
 

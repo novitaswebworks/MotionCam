@@ -18,7 +18,7 @@ First Windows build of MotionCam. It is a test release: recording has been built
 - The installer is not code-signed, so Windows SmartScreen will warn on first run.
 - Windows records at the display's native resolution; the Full HD presets only change the frame rate.
 - Recording and audio sync still need validation on real hardware, including multi-monitor and scaled displays.
-- The macOS app is unchanged from v0.2.0.
+- The macOS app behaves as in v0.2.0, apart from setup wording and where export looks for FFmpeg.
 
 ## v0.2.0
 
